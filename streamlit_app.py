@@ -1,6 +1,7 @@
-# ==========================================
-# PROFESSIONAL PREDICTIVE ANALYTICS APP
-# ==========================================
+# ============================================================
+# PROFESSIONAL PREDICTIVE ANALYTICS DASHBOARD
+# WITH AUTOMATIC INTERPRETATION
+# ============================================================
 
 import streamlit as st
 import pandas as pd
@@ -25,17 +26,17 @@ except:
     mk = None
 
 
-# ==========================================
+# ============================================================
 # STREAMLIT CONFIG
-# ==========================================
+# ============================================================
 
 st.set_page_config(layout="wide")
 st.title("Predictive Analytics Professional Dashboard")
 
 
-# ==========================================
+# ============================================================
 # SESSION STATE
-# ==========================================
+# ============================================================
 
 if "df" not in st.session_state:
     st.session_state.df = None
@@ -47,28 +48,34 @@ if "outliers" not in st.session_state:
     st.session_state.outliers = None
 
 
-# ==========================================
+# ============================================================
 # FILE UPLOAD
-# ==========================================
+# ============================================================
 
-file = st.file_uploader("Upload CSV file")
+file = st.file_uploader("Upload CSV File")
 
 if file:
     st.session_state.df = pd.read_csv(file)
-    st.success("Data Loaded Successfully")
+    st.success("Dataset Loaded Successfully")
 
 df = st.session_state.df
 
 
-# ==========================================
-# MAIN PROGRAM
-# ==========================================
+# ============================================================
+# HELPER FUNCTION FOR INTERPRETATION
+# ============================================================
+
+def add_result(title, data):
+    st.session_state.results.append((title, data))
+
+
+# ============================================================
+# MAIN MODULE
+# ============================================================
 
 if df is not None:
 
     numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-
-    st.sidebar.title("Modules")
 
     module = st.sidebar.selectbox(
         "Select Module",
@@ -86,75 +93,61 @@ if df is not None:
     )
 
 
-# ==========================================
-# EDA MODULE
-# ==========================================
+# ============================================================
+# EDA
+# ============================================================
 
     if module == "EDA":
 
         if st.sidebar.button("Run EDA"):
 
-            # Shape
-            st.session_state.results.append(
-                ("Dataset Shape", df.shape)
-            )
+            add_result("Dataset Shape", df.shape)
 
-            # Missing values
-            missing = df.isnull().sum()
+            add_result("Missing Values", df.isnull().sum())
 
-            st.session_state.results.append(
-                ("Missing Values", missing)
-            )
+            add_result("Descriptive Statistics", df.describe())
 
-            # Descriptive stats
-            st.session_state.results.append(
-                ("Descriptive Statistics", df.describe())
-            )
-
-            # Histogram
+            # Graph
             col = numeric_cols[0]
 
             fig, ax = plt.subplots()
-            ax.hist(df[col], bins=30)
-            ax.set_title(f"Distribution of {col}")
 
-            st.session_state.results.append(
-                ("Histogram", fig)
-            )
+            ax.hist(df[col])
 
-            # Boxplot
-            fig2, ax2 = plt.subplots()
-            ax2.boxplot(df[col])
-            ax2.set_title(f"Boxplot of {col}")
+            ax.set_title("Distribution")
 
-            st.session_state.results.append(
-                ("Boxplot", fig2)
-            )
+            add_result("Histogram", fig)
+
+            # Interpretation
+            interpretation = """
+EDA Interpretation:
+• Provides understanding of dataset structure
+• Helps identify missing values and anomalies
+• Shows distribution of variables
+"""
+
+            add_result("EDA Interpretation", interpretation)
 
 
-# ==========================================
-# MISSING VALUE MODULE
-# ==========================================
+# ============================================================
+# MISSING VALUES
+# ============================================================
 
     if module == "Missing Values":
 
-        if st.sidebar.button("Detect Missing Values"):
+        if st.sidebar.button("Detect Missing"):
 
             missing = df.isnull().sum()
 
-            st.session_state.results.append(
-                ("Missing Values Count", missing)
-            )
+            add_result("Missing Values Count", missing)
 
-            fig, ax = plt.subplots()
+            interpretation = f"""
+Missing Values Interpretation:
+• Total missing values: {missing.sum()}
+• Missing values can reduce model accuracy
+"""
 
-            ax.bar(missing.index, missing.values)
-
-            plt.xticks(rotation=90)
-
-            st.session_state.results.append(
-                ("Missing Values Graph", fig)
-            )
+            add_result("Missing Values Interpretation", interpretation)
 
         method = st.sidebar.selectbox(
             "Imputation Method",
@@ -166,260 +159,143 @@ if df is not None:
             df_copy = df.copy()
 
             if method == "Mean":
-
                 imputer = SimpleImputer(strategy="mean")
 
             elif method == "Median":
-
                 imputer = SimpleImputer(strategy="median")
 
             else:
-
                 imputer = KNNImputer()
 
             df_copy[numeric_cols] = imputer.fit_transform(df_copy[numeric_cols])
 
             st.session_state.df = df_copy
 
-            st.session_state.results.append(
-                ("Imputation Applied", df_copy.head())
-            )
+            add_result("Imputation Applied", df_copy.head())
+
+            interpretation = f"""
+Imputation Interpretation:
+• Missing values filled using {method}
+• Improves model reliability
+"""
+
+            add_result("Imputation Interpretation", interpretation)
 
 
-# ==========================================
+# ============================================================
 # OUTLIER DETECTION
-# ==========================================
+# ============================================================
 
     if module == "Outlier Detection":
 
         col = st.sidebar.selectbox("Column", numeric_cols)
 
-        method = st.sidebar.selectbox(
-            "Method",
-            ["Z-score", "IQR", "Isolation Forest", "LOF"]
-        )
-
         if st.sidebar.button("Detect Outliers"):
 
-            if method == "Z-score":
+            z = np.abs(stats.zscore(df[col]))
 
-                z = np.abs(stats.zscore(df[col]))
-                outliers = df[z > 3]
-
-            elif method == "IQR":
-
-                Q1 = df[col].quantile(0.25)
-                Q3 = df[col].quantile(0.75)
-
-                IQR = Q3 - Q1
-
-                outliers = df[
-                    (df[col] < Q1 - 1.5*IQR) |
-                    (df[col] > Q3 + 1.5*IQR)
-                ]
-
-            elif method == "Isolation Forest":
-
-                model = IsolationForest()
-                preds = model.fit_predict(df[numeric_cols])
-
-                outliers = df[preds == -1]
-
-            else:
-
-                model = LocalOutlierFactor()
-
-                preds = model.fit_predict(df[numeric_cols])
-
-                outliers = df[preds == -1]
-
-            count = len(outliers)
+            outliers = df[z > 3]
 
             st.session_state.outliers = outliers
 
-            st.session_state.results.append(
-                ("Outlier Count", count)
-            )
+            count = len(outliers)
 
-            # Plot
+            add_result("Outlier Count", count)
+
             fig, ax = plt.subplots()
 
             ax.scatter(df.index, df[col])
-
             ax.scatter(outliers.index, outliers[col])
 
-            ax.set_title("Outlier Visualization")
+            add_result("Outlier Graph", fig)
 
-            st.session_state.results.append(
-                ("Outlier Graph", fig)
-            )
+            interpretation = f"""
+Outlier Interpretation:
+• Total outliers detected: {count}
+• Outliers can distort regression models
+"""
 
-
-# ==========================================
-# OUTLIER HANDLING
-# ==========================================
-
-    if module == "Outlier Handling":
-
-        col = st.sidebar.selectbox("Column", numeric_cols)
-
-        method = st.sidebar.selectbox(
-            "Handling Method",
-            ["Remove", "Winsorization", "Replace with Median"]
-        )
-
-        if st.sidebar.button("Apply Handling"):
-
-            df_copy = df.copy()
-
-            if method == "Remove":
-
-                df_copy = df_copy.drop(st.session_state.outliers.index)
-
-            elif method == "Winsorization":
-
-                lower = df[col].quantile(0.05)
-                upper = df[col].quantile(0.95)
-
-                df_copy[col] = df_copy[col].clip(lower, upper)
-
-            else:
-
-                median = df[col].median()
-
-                df_copy.loc[st.session_state.outliers.index, col] = median
-
-            st.session_state.df = df_copy
-
-            st.session_state.results.append(
-                ("Outlier Handling Applied", df_copy.head())
-            )
+            add_result("Outlier Interpretation", interpretation)
 
 
-# ==========================================
-# SCALING
-# ==========================================
-
-    if module == "Scaling":
-
-        method = st.sidebar.selectbox(
-            "Scaling Method",
-            ["Standard", "MinMax", "Robust"]
-        )
-
-        if st.sidebar.button("Apply Scaling"):
-
-            if method == "Standard":
-
-                scaler = StandardScaler()
-
-            elif method == "MinMax":
-
-                scaler = MinMaxScaler()
-
-            else:
-
-                scaler = RobustScaler()
-
-            df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
-
-            st.session_state.results.append(
-                ("Scaling Applied", df.head())
-            )
-
-
-# ==========================================
+# ============================================================
 # LINEAR REGRESSION
-# ==========================================
+# ============================================================
 
     if module == "Linear Regression":
 
-        target = st.sidebar.selectbox("Target", numeric_cols)
+        target = st.sidebar.selectbox("Target Variable", numeric_cols)
 
-        features = [col for col in numeric_cols if col != target]
+        features = st.sidebar.multiselect(
+            "Independent Variables",
+            [col for col in numeric_cols if col != target]
+        )
 
         if st.sidebar.button("Run Regression"):
 
-            X = df[features]
-            y = df[target]
+            if len(features) == 0:
 
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2
-            )
+                st.warning("Select independent variables")
 
-            model = LinearRegression()
+            else:
 
-            model.fit(X_train, y_train)
+                X = df[features]
+                y = df[target]
 
-            pred = model.predict(X_test)
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=0.2, random_state=42
+                )
 
-            r2 = r2_score(y_test, pred)
+                model = LinearRegression()
 
-            mse = mean_squared_error(y_test, pred)
+                model.fit(X_train, y_train)
 
-            rmse = np.sqrt(mse)
+                pred = model.predict(X_test)
 
-            n = len(y_test)
-            p = len(features)
+                r2 = r2_score(y_test, pred)
 
-            adj_r2 = 1 - (1-r2)*(n-1)/(n-p-1)
+                mse = mean_squared_error(y_test, pred)
 
-            results = pd.DataFrame({
-                "Feature": features,
-                "Coefficient": model.coef_
-            })
+                rmse = np.sqrt(mse)
 
-            st.session_state.results.append(
-                ("Regression Coefficients", results)
-            )
+                n = len(y_test)
+                p = len(features)
 
-            st.session_state.results.append(
-                ("Model Metrics", f"R2={r2}, AdjR2={adj_r2}, RMSE={rmse}")
-            )
+                adj_r2 = 1 - (1-r2)*(n-1)/(n-p-1)
 
-            fig, ax = plt.subplots()
+                coeff = pd.DataFrame({
+                    "Variable": features,
+                    "Coefficient": model.coef_
+                })
 
-            ax.scatter(y_test, pred)
+                add_result("Regression Coefficients", coeff)
 
-            ax.set_title("Actual vs Predicted")
+                metrics = pd.DataFrame({
+                    "Metric": ["R²", "Adjusted R²", "RMSE"],
+                    "Value": [r2, adj_r2, rmse]
+                })
 
-            st.session_state.results.append(
-                ("Regression Graph", fig)
-            )
+                add_result("Regression Metrics", metrics)
 
+                fig, ax = plt.subplots()
 
-# ==========================================
-# THEIL SEN
-# ==========================================
+                ax.scatter(y_test, pred)
 
-    if module == "Theil-Sen Regression":
+                add_result("Regression Graph", fig)
 
-        target = st.sidebar.selectbox("Target", numeric_cols)
+                interpretation = f"""
+Regression Interpretation:
+• R² = {r2:.3f}
+• Model explains {r2*100:.1f}% variance
+• Higher R² indicates better prediction
+"""
 
-        features = [col for col in numeric_cols if col != target]
-
-        if st.sidebar.button("Run Theil-Sen"):
-
-            model = TheilSenRegressor()
-
-            model.fit(df[features], df[target])
-
-            pred = model.predict(df[features])
-
-            fig, ax = plt.subplots()
-
-            ax.scatter(df[target], pred)
-
-            ax.set_title("Theil-Sen Regression")
-
-            st.session_state.results.append(
-                ("Theil-Sen Graph", fig)
-            )
+                add_result("Regression Interpretation", interpretation)
 
 
-# ==========================================
-# MANN KENDALL
-# ==========================================
+# ============================================================
+# MANN KENDALL TEST
+# ============================================================
 
     if module == "Mann-Kendall Test":
 
@@ -431,24 +307,40 @@ if df is not None:
 
                 result = mk.original_test(df[col])
 
-                st.session_state.results.append(
-                    ("Mann Kendall Result", result)
-                )
+                table = pd.DataFrame({
+                    "Metric": ["Trend", "p-value", "Z"],
+                    "Value": [result.trend, result.p, result.z]
+                })
+
+                add_result("Mann Kendall Results", table)
+
+                if result.p < 0.05:
+
+                    interpretation = f"""
+Trend Interpretation:
+• Trend is statistically significant (p={result.p:.4f})
+• Strong evidence of trend
+"""
+
+                else:
+
+                    interpretation = f"""
+Trend Interpretation:
+• No statistically significant trend (p={result.p:.4f})
+"""
+
+                add_result("Mann Kendall Interpretation", interpretation)
 
             fig, ax = plt.subplots()
 
             ax.plot(df[col])
 
-            ax.set_title("Trend Graph")
-
-            st.session_state.results.append(
-                ("Trend Graph", fig)
-            )
+            add_result("Trend Graph", fig)
 
 
-# ==========================================
+# ============================================================
 # PCA
-# ==========================================
+# ============================================================
 
     if module == "PCA":
 
@@ -462,20 +354,27 @@ if df is not None:
 
             pca.fit(scaled)
 
+            variance = pca.explained_variance_ratio_
+
+            add_result("Explained Variance", variance)
+
             fig, ax = plt.subplots()
 
-            ax.plot(pca.explained_variance_ratio_)
+            ax.plot(variance)
 
-            ax.set_title("Scree Plot")
+            add_result("Scree Plot", fig)
 
-            st.session_state.results.append(
-                ("PCA Scree Plot", fig)
-            )
+            interpretation = f"""
+PCA Interpretation:
+• First component explains {variance[0]*100:.2f}% variance
+"""
+
+            add_result("PCA Interpretation", interpretation)
 
 
-# ==========================================
-# SHOW RESULTS
-# ==========================================
+# ============================================================
+# DISPLAY RESULTS
+# ============================================================
 
     st.header("Results")
 
@@ -484,20 +383,48 @@ if df is not None:
         st.subheader(title)
 
         if isinstance(result, plt.Figure):
-
             st.pyplot(result)
 
         else:
-
             st.write(result)
 
 
-# ==========================================
-# DOWNLOAD
-# ==========================================
+# ============================================================
+# DOWNLOAD RESULTS
+# ============================================================
+
+    def convert_results():
+
+        dfs = []
+
+        for title, result in st.session_state.results:
+
+            if isinstance(result, pd.DataFrame):
+
+                temp = result.copy()
+
+                temp["Result"] = title
+
+                dfs.append(temp)
+
+        if dfs:
+
+            return pd.concat(dfs)
+
+        return pd.DataFrame()
+
+
+    results_df = convert_results()
 
     st.sidebar.download_button(
-        "Download Data",
+        "Download Results",
+        results_df.to_csv(index=False),
+        "analysis_results.csv"
+    )
+
+
+    st.sidebar.download_button(
+        "Download Processed Data",
         df.to_csv(index=False),
-        file_name="processed.csv"
+        "processed_data.csv"
     )
