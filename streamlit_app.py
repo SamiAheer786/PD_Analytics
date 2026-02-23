@@ -23,7 +23,7 @@ try:
 except:
     mk = None
 
-# Safe PDF Import (prevents crash)
+# Safe PDF import
 try:
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet
@@ -77,7 +77,7 @@ def add_result(title, data):
 
 
 # ============================================================
-# MAIN MODULE
+# MAIN LOGIC
 # ============================================================
 
 if df is not None:
@@ -99,10 +99,76 @@ if df is not None:
         ]
     )
 
+    # ======================= EDA =======================
 
-# ============================================================
-# OUTLIER HANDLING (NEW - FIXED)
-# ============================================================
+    if module == "EDA":
+
+        if st.sidebar.button("Run EDA"):
+
+            add_result("Dataset Shape", df.shape)
+            add_result("Missing Values", df.isnull().sum())
+            add_result("Descriptive Statistics", df.describe())
+
+            if len(numeric_cols) > 0:
+                col = numeric_cols[0]
+                fig, ax = plt.subplots()
+                ax.hist(df[col])
+                ax.set_title("Distribution")
+                add_result("Histogram", fig)
+
+            add_result("EDA Interpretation",
+                       "EDA helps understand structure, missing data and distribution.")
+
+    # ======================= MISSING VALUES =======================
+
+    if module == "Missing Values":
+
+        if st.sidebar.button("Detect Missing"):
+            missing = df.isnull().sum()
+            add_result("Missing Values Count", missing)
+
+        method = st.sidebar.selectbox(
+            "Imputation Method",
+            ["Mean", "Median", "KNN"]
+        )
+
+        if st.sidebar.button("Apply Imputation"):
+
+            df_copy = df.copy()
+
+            if method == "Mean":
+                imputer = SimpleImputer(strategy="mean")
+            elif method == "Median":
+                imputer = SimpleImputer(strategy="median")
+            else:
+                imputer = KNNImputer()
+
+            df_copy[numeric_cols] = imputer.fit_transform(df_copy[numeric_cols])
+            st.session_state.df = df_copy
+
+            add_result("Imputation Applied", df_copy.head())
+
+    # ======================= OUTLIER DETECTION =======================
+
+    if module == "Outlier Detection":
+
+        col = st.sidebar.selectbox("Column", numeric_cols)
+
+        if st.sidebar.button("Detect Outliers"):
+
+            z = np.abs(stats.zscore(df[col]))
+            outliers = df[z > 3]
+
+            st.session_state.outliers = outliers
+
+            add_result("Outlier Count", len(outliers))
+
+            fig, ax = plt.subplots()
+            ax.scatter(df.index, df[col])
+            ax.scatter(outliers.index, outliers[col])
+            add_result("Outlier Graph", fig)
+
+    # ======================= OUTLIER HANDLING =======================
 
     if module == "Outlier Handling":
 
@@ -112,13 +178,11 @@ if df is not None:
 
             if st.session_state.outliers is None:
                 st.warning("Run Outlier Detection first")
-
             else:
                 df_copy = df.copy()
 
                 if method == "Remove":
                     df_copy = df_copy.drop(st.session_state.outliers.index)
-
                 else:
                     for col in numeric_cols:
                         lower = df_copy[col].quantile(0.01)
@@ -127,12 +191,8 @@ if df is not None:
 
                 st.session_state.df = df_copy
                 add_result("Outliers Handled", df_copy.head())
-                st.success("Outliers handled successfully")
 
-
-# ============================================================
-# SCALING (NEW - FIXED)
-# ============================================================
+    # ======================= SCALING =======================
 
     if module == "Scaling":
 
@@ -153,20 +213,48 @@ if df is not None:
                 scaler = RobustScaler()
 
             df_copy[numeric_cols] = scaler.fit_transform(df_copy[numeric_cols])
-
             st.session_state.df = df_copy
+
             add_result("Scaling Applied", df_copy.head())
-            st.success("Scaling applied successfully")
 
+    # ======================= LINEAR REGRESSION =======================
 
-# ============================================================
-# THEIL-SEN REGRESSION (NEW - FIXED)
-# ============================================================
+    if module == "Linear Regression":
+
+        target = st.sidebar.selectbox("Target Variable", numeric_cols)
+
+        features = st.sidebar.multiselect(
+            "Independent Variables",
+            [col for col in numeric_cols if col != target]
+        )
+
+        if st.sidebar.button("Run Regression"):
+
+            if len(features) == 0:
+                st.warning("Select independent variables")
+            else:
+                X = df[features]
+                y = df[target]
+
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=0.2, random_state=42
+                )
+
+                model = LinearRegression()
+                model.fit(X_train, y_train)
+                pred = model.predict(X_test)
+
+                r2 = r2_score(y_test, pred)
+                rmse = np.sqrt(mean_squared_error(y_test, pred))
+
+                add_result("R2 Score", r2)
+                add_result("RMSE", rmse)
+
+    # ======================= THEIL-SEN =======================
 
     if module == "Theil-Sen Regression":
 
         target = st.sidebar.selectbox("Target Variable", numeric_cols)
-
         feature = st.sidebar.selectbox(
             "Independent Variable",
             [col for col in numeric_cols if col != target]
@@ -180,38 +268,60 @@ if df is not None:
             model = TheilSenRegressor()
             model.fit(X, y)
 
-            coeff = model.coef_[0]
-            intercept = model.intercept_
+            add_result("Theil-Sen Coefficient", model.coef_[0])
+            add_result("Theil-Sen Intercept", model.intercept_)
 
-            table = pd.DataFrame({
-                "Metric": ["Coefficient", "Intercept"],
-                "Value": [coeff, intercept]
-            })
+    # ======================= MANN KENDALL =======================
 
-            add_result("Theil-Sen Regression Results", table)
+    if module == "Mann-Kendall Test":
 
-            interpretation = f"""
-Theil-Sen Interpretation:
-• Robust regression method
-• Coefficient = {coeff:.4f}
-• Less sensitive to outliers
-"""
-            add_result("Theil-Sen Interpretation", interpretation)
+        col = st.sidebar.selectbox("Column", numeric_cols)
 
+        if st.sidebar.button("Run Test"):
 
-# ============================================================
-# PDF DOWNLOAD (REPLACES CSV)
-# ============================================================
+            if mk:
+                result = mk.original_test(df[col])
+                add_result("Trend", result.trend)
+                add_result("p-value", result.p)
+            else:
+                st.warning("pymannkendall not installed")
+
+    # ======================= PCA =======================
+
+    if module == "PCA":
+
+        if st.sidebar.button("Run PCA"):
+
+            scaler = StandardScaler()
+            scaled = scaler.fit_transform(df[numeric_cols])
+
+            pca = PCA()
+            pca.fit(scaled)
+
+            variance = pca.explained_variance_ratio_
+            add_result("Explained Variance", variance)
+
+    # ======================= DISPLAY RESULTS =======================
+
+    st.header("Results")
+
+    for title, result in st.session_state.results:
+        st.subheader(title)
+        if isinstance(result, plt.Figure):
+            st.pyplot(result)
+        else:
+            st.write(result)
+
+    # ======================= PDF DOWNLOAD =======================
 
     if st.sidebar.button("Download Results as PDF"):
 
         if not PDF_AVAILABLE:
-            st.sidebar.error("Add reportlab to requirements.txt")
+            st.sidebar.error("Install reportlab in requirements.txt")
         else:
             file_path = "analysis_report.pdf"
             doc = SimpleDocTemplate(file_path)
             elements = []
-
             styles = getSampleStyleSheet()
 
             elements.append(Paragraph("Predictive Analytics Report", styles["Heading1"]))
