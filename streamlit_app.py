@@ -104,12 +104,11 @@ if df is not None:
     if module == "EDA":
 
         if st.sidebar.button("Run EDA"):
-
             add_result("Dataset Shape", df.shape)
             add_result("Missing Values", df.isnull().sum())
             add_result("Descriptive Statistics", df.describe())
 
-            if len(numeric_cols) > 0:
+            if numeric_cols:
                 col = numeric_cols[0]
                 fig, ax = plt.subplots()
                 ax.hist(df[col])
@@ -117,20 +116,16 @@ if df is not None:
                 add_result("Histogram", fig)
 
             add_result("EDA Interpretation",
-                       "EDA helps understand structure, missing data and distribution.")
+                       "EDA helps understand structure, missing data and variable distribution.")
 
     # ======================= MISSING VALUES =======================
 
     if module == "Missing Values":
 
         if st.sidebar.button("Detect Missing"):
-            missing = df.isnull().sum()
-            add_result("Missing Values Count", missing)
+            add_result("Missing Values Count", df.isnull().sum())
 
-        method = st.sidebar.selectbox(
-            "Imputation Method",
-            ["Mean", "Median", "KNN"]
-        )
+        method = st.sidebar.selectbox("Imputation Method", ["Mean", "Median", "KNN"])
 
         if st.sidebar.button("Apply Imputation"):
 
@@ -145,7 +140,6 @@ if df is not None:
 
             df_copy[numeric_cols] = imputer.fit_transform(df_copy[numeric_cols])
             st.session_state.df = df_copy
-
             add_result("Imputation Applied", df_copy.head())
 
     # ======================= OUTLIER DETECTION =======================
@@ -158,7 +152,6 @@ if df is not None:
 
             z = np.abs(stats.zscore(df[col]))
             outliers = df[z > 3]
-
             st.session_state.outliers = outliers
 
             add_result("Outlier Count", len(outliers))
@@ -166,6 +159,7 @@ if df is not None:
             fig, ax = plt.subplots()
             ax.scatter(df.index, df[col])
             ax.scatter(outliers.index, outliers[col])
+            ax.set_title("Outlier Detection")
             add_result("Outlier Graph", fig)
 
     # ======================= OUTLIER HANDLING =======================
@@ -196,10 +190,7 @@ if df is not None:
 
     if module == "Scaling":
 
-        scaler_type = st.sidebar.selectbox(
-            "Select Scaler",
-            ["Standard", "MinMax", "Robust"]
-        )
+        scaler_type = st.sidebar.selectbox("Select Scaler", ["Standard", "MinMax", "Robust"])
 
         if st.sidebar.button("Apply Scaling"):
 
@@ -214,139 +205,113 @@ if df is not None:
 
             df_copy[numeric_cols] = scaler.fit_transform(df_copy[numeric_cols])
             st.session_state.df = df_copy
-
             add_result("Scaling Applied", df_copy.head())
 
     # ======================= LINEAR REGRESSION =======================
 
-    # ======================= LINEAR REGRESSION =======================
+    if module == "Linear Regression":
 
-if module == "Linear Regression":
+        target = st.sidebar.selectbox("Target Variable", numeric_cols)
+        features = st.sidebar.multiselect(
+            "Independent Variables",
+            [col for col in numeric_cols if col != target]
+        )
 
-    target = st.sidebar.selectbox("Target Variable", numeric_cols)
+        if st.sidebar.button("Run Regression"):
 
-    features = st.sidebar.multiselect(
-        "Independent Variables",
-        [col for col in numeric_cols if col != target]
-    )
+            if not features:
+                st.warning("Select independent variables")
+            else:
+                X = df[features]
+                y = df[target]
 
-    if st.sidebar.button("Run Regression"):
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=0.2, random_state=42
+                )
 
-        if len(features) == 0:
-            st.warning("Select independent variables")
-        else:
-            X = df[features]
+                model = LinearRegression()
+                model.fit(X_train, y_train)
+                pred = model.predict(X_test)
+
+                r2 = r2_score(y_test, pred)
+                rmse = np.sqrt(mean_squared_error(y_test, pred))
+
+                add_result("R2 Score", r2)
+                add_result("RMSE", rmse)
+                add_result("Intercept", model.intercept_)
+                add_result("Coefficients", dict(zip(features, model.coef_)))
+
+                fig, ax = plt.subplots()
+                ax.scatter(y_test, pred)
+                ax.set_xlabel("Actual")
+                ax.set_ylabel("Predicted")
+                ax.set_title("Actual vs Predicted")
+                add_result("Regression Plot", fig)
+
+                add_result("Interpretation",
+                           f"The model explains {round(r2*100,2)}% variance. "
+                           f"RMSE is {round(rmse,2)}.")
+
+    # ======================= THEIL-SEN =======================
+
+    if module == "Theil-Sen Regression":
+
+        target = st.sidebar.selectbox("Target Variable", numeric_cols)
+        feature = st.sidebar.selectbox(
+            "Independent Variable",
+            [col for col in numeric_cols if col != target]
+        )
+
+        if st.sidebar.button("Run Theil-Sen Regression"):
+
+            X = df[[feature]]
             y = df[target]
 
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=42
-            )
+            model = TheilSenRegressor()
+            model.fit(X, y)
 
-            model = LinearRegression()
-            model.fit(X_train, y_train)
-            pred = model.predict(X_test)
+            coef = model.coef_[0]
+            intercept = model.intercept_
 
-            r2 = r2_score(y_test, pred)
-            rmse = np.sqrt(mean_squared_error(y_test, pred))
+            add_result("Slope", coef)
+            add_result("Intercept", intercept)
 
-            add_result("R2 Score", r2)
-            add_result("RMSE", rmse)
-            add_result("Intercept", model.intercept_)
-            add_result("Coefficients", dict(zip(features, model.coef_)))
-
-            # 📊 Plot
             fig, ax = plt.subplots()
-            ax.scatter(y_test, pred)
-            ax.set_xlabel("Actual Values")
-            ax.set_ylabel("Predicted Values")
-            ax.set_title("Actual vs Predicted")
-            add_result("Regression Plot", fig)
+            ax.scatter(X, y)
+            ax.plot(X, model.predict(X))
+            ax.set_title("Theil-Sen Regression")
+            add_result("Theil-Sen Plot", fig)
 
-            # 🧠 Interpretation
-            interpretation = f"""
-            The model explains {round(r2*100,2)}% of the variance in {target}.
-            RMSE is {round(rmse,2)}, indicating average prediction error.
-            Higher R² indicates better model fit.
-            """
+            add_result("Interpretation",
+                       f"Each unit increase in {feature} changes {target} by {round(coef,3)}.")
 
-            add_result("Interpretation", interpretation)
+    # ======================= MANN-KENDALL =======================
 
-    # ======================= THEIL-SEN =======================
+    if module == "Mann-Kendall Test":
 
-    # ======================= THEIL-SEN =======================
+        col = st.sidebar.selectbox("Column", numeric_cols)
 
-if module == "Theil-Sen Regression":
+        if st.sidebar.button("Run Test"):
 
-    target = st.sidebar.selectbox("Target Variable", numeric_cols)
-    feature = st.sidebar.selectbox(
-        "Independent Variable",
-        [col for col in numeric_cols if col != target]
-    )
+            if mk:
+                result = mk.original_test(df[col])
 
-    if st.sidebar.button("Run Theil-Sen Regression"):
+                add_result("Trend", result.trend)
+                add_result("p-value", result.p)
+                add_result("Tau", result.Tau)
+                add_result("Slope", result.slope)
 
-        X = df[[feature]]
-        y = df[target]
+                fig, ax = plt.subplots()
+                ax.plot(df[col])
+                ax.set_title("Trend Visualization")
+                add_result("Trend Plot", fig)
 
-        model = TheilSenRegressor()
-        model.fit(X, y)
-
-        coef = model.coef_[0]
-        intercept = model.intercept_
-
-        add_result("Slope", coef)
-        add_result("Intercept", intercept)
-
-        # 📊 Plot
-        fig, ax = plt.subplots()
-        ax.scatter(X, y)
-        ax.plot(X, model.predict(X))
-        ax.set_title("Theil-Sen Robust Regression")
-        add_result("Theil-Sen Plot", fig)
-
-        # 🧠 Interpretation
-        interpretation = f"""
-        The slope of {round(coef,3)} indicates that for every 1 unit increase in {feature},
-        {target} changes by {round(coef,3)} units.
-        Theil-Sen is robust to outliers.
-        """
-
-        add_result("Interpretation", interpretation)
-
-    # ======================= MANN KENDALL =======================
-
-   # ======================= MANN KENDALL =======================
-
-if module == "Mann-Kendall Test":
-
-    col = st.sidebar.selectbox("Column", numeric_cols)
-
-    if st.sidebar.button("Run Test"):
-
-        if mk:
-            result = mk.original_test(df[col])
-
-            add_result("Trend", result.trend)
-            add_result("p-value", result.p)
-            add_result("Tau", result.Tau)
-            add_result("Slope", result.slope)
-
-            # 📊 Trend Plot
-            fig, ax = plt.subplots()
-            ax.plot(df[col])
-            ax.set_title("Time Series Trend")
-            add_result("Trend Plot", fig)
-
-            # 🧠 Interpretation
-            if result.p < 0.05:
-                interp = "Statistically significant trend detected."
+                if result.p < 0.05:
+                    add_result("Interpretation", "Statistically significant trend detected.")
+                else:
+                    add_result("Interpretation", "No statistically significant trend detected.")
             else:
-                interp = "No statistically significant trend detected."
-
-            add_result("Interpretation", interp)
-
-        else:
-            st.warning("pymannkendall not installed")
+                st.warning("pymannkendall not installed")
 
     # ======================= PCA =======================
 
@@ -360,8 +325,7 @@ if module == "Mann-Kendall Test":
             pca = PCA()
             pca.fit(scaled)
 
-            variance = pca.explained_variance_ratio_
-            add_result("Explained Variance", variance)
+            add_result("Explained Variance Ratio", pca.explained_variance_ratio_)
 
     # ======================= DISPLAY RESULTS =======================
 
