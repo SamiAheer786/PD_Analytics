@@ -5,4 +5,4 @@ matplotlib
 scikit-learn
 scipy
 pyMannKendall
-reportlab
+reportlab==4.0.8
