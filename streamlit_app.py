@@ -219,72 +219,134 @@ if df is not None:
 
     # ======================= LINEAR REGRESSION =======================
 
-    if module == "Linear Regression":
+    # ======================= LINEAR REGRESSION =======================
 
-        target = st.sidebar.selectbox("Target Variable", numeric_cols)
+if module == "Linear Regression":
 
-        features = st.sidebar.multiselect(
-            "Independent Variables",
-            [col for col in numeric_cols if col != target]
-        )
+    target = st.sidebar.selectbox("Target Variable", numeric_cols)
 
-        if st.sidebar.button("Run Regression"):
+    features = st.sidebar.multiselect(
+        "Independent Variables",
+        [col for col in numeric_cols if col != target]
+    )
 
-            if len(features) == 0:
-                st.warning("Select independent variables")
-            else:
-                X = df[features]
-                y = df[target]
+    if st.sidebar.button("Run Regression"):
 
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=0.2, random_state=42
-                )
+        if len(features) == 0:
+            st.warning("Select independent variables")
+        else:
+            X = df[features]
+            y = df[target]
 
-                model = LinearRegression()
-                model.fit(X_train, y_train)
-                pred = model.predict(X_test)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
 
-                r2 = r2_score(y_test, pred)
-                rmse = np.sqrt(mean_squared_error(y_test, pred))
+            model = LinearRegression()
+            model.fit(X_train, y_train)
+            pred = model.predict(X_test)
 
-                add_result("R2 Score", r2)
-                add_result("RMSE", rmse)
+            r2 = r2_score(y_test, pred)
+            rmse = np.sqrt(mean_squared_error(y_test, pred))
+
+            add_result("R2 Score", r2)
+            add_result("RMSE", rmse)
+            add_result("Intercept", model.intercept_)
+            add_result("Coefficients", dict(zip(features, model.coef_)))
+
+            # 📊 Plot
+            fig, ax = plt.subplots()
+            ax.scatter(y_test, pred)
+            ax.set_xlabel("Actual Values")
+            ax.set_ylabel("Predicted Values")
+            ax.set_title("Actual vs Predicted")
+            add_result("Regression Plot", fig)
+
+            # 🧠 Interpretation
+            interpretation = f"""
+            The model explains {round(r2*100,2)}% of the variance in {target}.
+            RMSE is {round(rmse,2)}, indicating average prediction error.
+            Higher R² indicates better model fit.
+            """
+
+            add_result("Interpretation", interpretation)
 
     # ======================= THEIL-SEN =======================
 
-    if module == "Theil-Sen Regression":
+    # ======================= THEIL-SEN =======================
 
-        target = st.sidebar.selectbox("Target Variable", numeric_cols)
-        feature = st.sidebar.selectbox(
-            "Independent Variable",
-            [col for col in numeric_cols if col != target]
-        )
+if module == "Theil-Sen Regression":
 
-        if st.sidebar.button("Run Theil-Sen Regression"):
+    target = st.sidebar.selectbox("Target Variable", numeric_cols)
+    feature = st.sidebar.selectbox(
+        "Independent Variable",
+        [col for col in numeric_cols if col != target]
+    )
 
-            X = df[[feature]]
-            y = df[target]
+    if st.sidebar.button("Run Theil-Sen Regression"):
 
-            model = TheilSenRegressor()
-            model.fit(X, y)
+        X = df[[feature]]
+        y = df[target]
 
-            add_result("Theil-Sen Coefficient", model.coef_[0])
-            add_result("Theil-Sen Intercept", model.intercept_)
+        model = TheilSenRegressor()
+        model.fit(X, y)
+
+        coef = model.coef_[0]
+        intercept = model.intercept_
+
+        add_result("Slope", coef)
+        add_result("Intercept", intercept)
+
+        # 📊 Plot
+        fig, ax = plt.subplots()
+        ax.scatter(X, y)
+        ax.plot(X, model.predict(X))
+        ax.set_title("Theil-Sen Robust Regression")
+        add_result("Theil-Sen Plot", fig)
+
+        # 🧠 Interpretation
+        interpretation = f"""
+        The slope of {round(coef,3)} indicates that for every 1 unit increase in {feature},
+        {target} changes by {round(coef,3)} units.
+        Theil-Sen is robust to outliers.
+        """
+
+        add_result("Interpretation", interpretation)
 
     # ======================= MANN KENDALL =======================
 
-    if module == "Mann-Kendall Test":
+   # ======================= MANN KENDALL =======================
 
-        col = st.sidebar.selectbox("Column", numeric_cols)
+if module == "Mann-Kendall Test":
 
-        if st.sidebar.button("Run Test"):
+    col = st.sidebar.selectbox("Column", numeric_cols)
 
-            if mk:
-                result = mk.original_test(df[col])
-                add_result("Trend", result.trend)
-                add_result("p-value", result.p)
+    if st.sidebar.button("Run Test"):
+
+        if mk:
+            result = mk.original_test(df[col])
+
+            add_result("Trend", result.trend)
+            add_result("p-value", result.p)
+            add_result("Tau", result.Tau)
+            add_result("Slope", result.slope)
+
+            # 📊 Trend Plot
+            fig, ax = plt.subplots()
+            ax.plot(df[col])
+            ax.set_title("Time Series Trend")
+            add_result("Trend Plot", fig)
+
+            # 🧠 Interpretation
+            if result.p < 0.05:
+                interp = "Statistically significant trend detected."
             else:
-                st.warning("pymannkendall not installed")
+                interp = "No statistically significant trend detected."
+
+            add_result("Interpretation", interp)
+
+        else:
+            st.warning("pymannkendall not installed")
 
     # ======================= PCA =======================
 
